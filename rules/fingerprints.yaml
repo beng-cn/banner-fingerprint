@@ -16,8 +16,8 @@ rules:
       alpine: Alpine
       raspbian: Raspbian
     patterns:
-      # 例: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10
-      - '^SSH-2\.0-(?P<software>[^\s_]+)_(?P<version>[0-9]+\.[0-9]+p?[0-9]*)(?:[-\s]+(?P<os>[A-Za-z][^\r\n]*))?'
+      # 例: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10（含老协议头 SSH-1.99-OpenSSH_4.3）
+      - '^SSH-(?:2\.0|1\.99)-(?P<software>[^\s_]+)_(?P<version>[0-9]+\.[0-9]+p?[0-9]*)(?:[-\s]+(?P<os>[A-Za-z][^\r\n]*))?'
 
   - id: ssh-generic
     protocol: SSH
@@ -25,13 +25,13 @@ rules:
     port_hints: [22, 2222]
     priority: 90
     patterns:
-      - '^SSH-2\.0-(?P<software>[^\s_]+)_(?P<version>[^\s]+)'
+      - '^SSH-(?:2\.0|1\.99)-(?P<software>[^\s_]+)_(?P<version>[^\s]+)'
 
   # ================= HTTP =================
   - id: http-nginx
     protocol: HTTP
     product: nginx
-    port_hints: [80, 443, 8000, 8080, 8443]
+    port_hints: [80, 443, 8000, 8080, 8443, 8888]
     priority: 100
     patterns:
       # 例: HTTP/1.1 200 OK ... Server: nginx/1.24.0
@@ -40,7 +40,7 @@ rules:
   - id: http-apache
     protocol: HTTP
     product: Apache
-    port_hints: [80, 443, 8000, 8080, 8443]
+    port_hints: [80, 443, 8000, 8080, 8443, 8888]
     priority: 100
     patterns:
       # 例: Server: Apache/2.4.57 (Ubuntu)
@@ -49,17 +49,26 @@ rules:
   - id: http-jetty
     protocol: HTTP
     product: Jetty
-    port_hints: [80, 443, 8000, 8080, 8443]
+    port_hints: [80, 443, 8000, 8080, 8443, 8888]
     priority: 100
     conf_bias: -0.05       # 版本带构建号（9.4.51.v20230210），仅取主版本三段，置信度微降
     patterns:
-      # 例: Server: Jetty(9.4.51.v20230210)
-      - '(?i)Server:\s*Jetty\((?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+      # 兼容两种格式: Server: Jetty(9.4.51.v20230210) 与 Server: Jetty/9.4.51
+      - '(?i)Server:\s*Jetty[/(](?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  - id: http-iis
+    protocol: HTTP
+    product: Microsoft-IIS
+    port_hints: [80, 443, 8000, 8080, 8443, 8888]
+    priority: 100
+    patterns:
+      # 例: Server: Microsoft-IIS/10.0
+      - '(?i)Server:\s*Microsoft-IIS/(?P<version>[0-9]+\.[0-9]+)'
 
   - id: http-generic
     protocol: HTTP
     product: ""            # 无法确定具体 Web 服务器时，仅识别协议
-    port_hints: [80, 443, 8000, 8080, 8443]
+    port_hints: [80, 443, 8000, 8080, 8443, 8888]
     priority: 1
     patterns:
       - '^HTTP/'
@@ -133,3 +142,22 @@ rules:
     priority: 1
     patterns:
       - '^220'
+
+  # ================= SSL/TLS =================
+  - id: ssl-tls
+    protocol: SSL
+    product: TLS
+    port_hints: [443, 8443]
+    priority: 95
+    conf_bias: 0.03        # 无标准端口先验时补偿至 0.90 档
+    patterns:
+      # TLS ClientHello 握手包：\x16=握手记录，\x03\x0?=客户端支持的最高 TLS 版本
+      # 例: \x16\x03\x01\x00\xa5\x01\x00\x00\xa1 → TLS 1.0
+      - regex: '\x16\x03\x01'
+        version: '1.0'
+      - regex: '\x16\x03\x02'
+        version: '1.1'
+      - regex: '\x16\x03\x03'
+        version: '1.2'
+      - regex: '\x16\x03\x04'
+        version: '1.3'

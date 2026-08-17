@@ -35,9 +35,29 @@ type Rule struct {
 	Priority  int               `yaml:"priority"`
 	ConfBias  float64           `yaml:"conf_bias"` // 规则级置信度微调（如 Jetty -0.05）
 	OsMap     map[string]string `yaml:"os_map"`    // OS 捕获组规范化映射（ubuntu → Ubuntu）
-	Patterns  []string          `yaml:"patterns"`
+	Patterns  []Pattern         `yaml:"patterns"`
+}
 
-	compiled []*regexp.Regexp
+// Pattern 匹配模式：正则表达式 + 可选静态覆盖值。
+// 静态值用于正则无法直接表达的输出（如 TLS 版本随握手字节映射）；
+// 优先级：pattern 静态值 > 捕获组 > 规则默认值。
+type Pattern struct {
+	Regex   string `yaml:"regex"`
+	Product string `yaml:"product"`
+	Version string `yaml:"version"`
+	OS      string `yaml:"os"`
+
+	compiled *regexp.Regexp
+}
+
+// UnmarshalYAML 兼容两种规则写法：纯字符串（仅正则）或结构化对象
+func (p *Pattern) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		p.Regex = node.Value
+		return nil
+	}
+	type plain Pattern // 别名类型避免递归调用自身
+	return node.Decode((*plain)(p))
 }
 
 // matchResult 单条规则的命中结果（捕获组提取值）
@@ -77,13 +97,13 @@ func (e *Engine) Reload() error {
 	}
 	for i := range cfg.Rules {
 		r := &cfg.Rules[i]
-		r.compiled = r.compiled[:0]
-		for _, p := range r.Patterns {
-			re, err := regexp.Compile(p)
+		for j := range r.Patterns {
+			p := &r.Patterns[j]
+			re, err := regexp.Compile(p.Regex)
 			if err != nil {
-				return fmt.Errorf("规则 %s 正则编译失败: %w", r.ID, err)
+				return fmt.Errorf("规则 %s 第 %d 条正则编译失败: %w", r.ID, j+1, err)
 			}
-			r.compiled = append(r.compiled, re)
+			p.compiled = re
 		}
 	}
 	// 按优先级降序，匹配时先到先得
@@ -158,13 +178,17 @@ func scan(rules []Rule, port int, banner string, portHintsOnly bool) *matchResul
 		if portHintsOnly && !contains(r.PortHints, port) {
 			continue
 		}
-		for _, re := range r.compiled {
-			m := re.FindStringSubmatch(banner)
+		for _, pat := range r.Patterns {
+			m := pat.compiled.FindStringSubmatch(banner)
 			if m == nil {
 				continue
 			}
 			res := &matchResult{rule: r, product: r.Product}
-			for j, name := range re.SubexpNames() {
+			if pat.Product != "" { // pattern 静态值优先于规则默认值
+				res.product = pat.Product
+			}
+			res.version, res.os = pat.Version, pat.OS
+			for j, name := range pat.compiled.SubexpNames() {
 				if j == 0 || name == "" {
 					continue
 				}
@@ -173,10 +197,14 @@ func scan(rules []Rule, port int, banner string, portHintsOnly bool) *matchResul
 					if m[j] != "" {
 						res.product = m[j]
 					}
-				case "version":
-					res.version = m[j]
+				case "version": // 捕获组仅在 pattern 未静态指定时生效
+					if res.version == "" && m[j] != "" {
+						res.version = m[j]
+					}
 				case "os":
-					res.os = m[j]
+					if res.os == "" && m[j] != "" {
+						res.os = m[j]
+					}
 				}
 			}
 			return res
