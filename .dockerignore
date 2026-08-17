@@ -1,0 +1,11 @@
+.git
+.gitignore
+*.exe
+*_test.go
+test/
+data
+.idea
+.vscode
+Dockerfile
+docker-compose.yml
+CLAUDE.md

@@ -1,0 +1,135 @@
+# Banner 指纹规则库 —— 与程序代码完全解耦，SIGHUP 热重载生效
+# 捕获组约定：software/product = 软件名（可覆盖默认 product）；version = 版本；os = 操作系统特征
+# 优先级：精确规则 100 > 软件族通用规则 90 > 协议兜底规则 1
+rules:
+  # ================= SSH =================
+  - id: ssh-openssh
+    protocol: SSH
+    product: OpenSSH
+    port_hints: [22, 2222]
+    priority: 100
+    os_map:
+      ubuntu: Ubuntu
+      debian: Debian
+      centos: CentOS
+      fedora: Fedora
+      alpine: Alpine
+      raspbian: Raspbian
+    patterns:
+      # 例: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10
+      - '^SSH-2\.0-(?P<software>[^\s_]+)_(?P<version>[0-9]+\.[0-9]+p?[0-9]*)(?:[-\s]+(?P<os>[A-Za-z][^\r\n]*))?'
+
+  - id: ssh-generic
+    protocol: SSH
+    product: ""            # 非 OpenSSH 实现（Dropbear 等），product 由捕获组给出
+    port_hints: [22, 2222]
+    priority: 90
+    patterns:
+      - '^SSH-2\.0-(?P<software>[^\s_]+)_(?P<version>[^\s]+)'
+
+  # ================= HTTP =================
+  - id: http-nginx
+    protocol: HTTP
+    product: nginx
+    port_hints: [80, 443, 8000, 8080, 8443]
+    priority: 100
+    patterns:
+      # 例: HTTP/1.1 200 OK ... Server: nginx/1.24.0
+      - '(?i)Server:\s*nginx/(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  - id: http-apache
+    protocol: HTTP
+    product: Apache
+    port_hints: [80, 443, 8000, 8080, 8443]
+    priority: 100
+    patterns:
+      # 例: Server: Apache/2.4.57 (Ubuntu)
+      - '(?i)Server:\s*Apache/(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  - id: http-jetty
+    protocol: HTTP
+    product: Jetty
+    port_hints: [80, 443, 8000, 8080, 8443]
+    priority: 100
+    conf_bias: -0.05       # 版本带构建号（9.4.51.v20230210），仅取主版本三段，置信度微降
+    patterns:
+      # 例: Server: Jetty(9.4.51.v20230210)
+      - '(?i)Server:\s*Jetty\((?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  - id: http-generic
+    protocol: HTTP
+    product: ""            # 无法确定具体 Web 服务器时，仅识别协议
+    port_hints: [80, 443, 8000, 8080, 8443]
+    priority: 1
+    patterns:
+      - '^HTTP/'
+
+  # ================= MySQL =================
+  - id: mysql
+    protocol: MySQL
+    product: MySQL
+    port_hints: [3306, 33060]
+    priority: 100
+    patterns:
+      # 纯版本串（扫描器已解析握手包）: 8.0.32 / 5.7.36-log
+      - '^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+      # 二进制握手包：版本串以换行符开头（\x0a 为 YAML 转义，编译后为换行字符）
+      - '\x0a(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  # ================= Redis =================
+  - id: redis
+    protocol: Redis
+    product: Redis
+    port_hints: [6379, 6380]
+    priority: 100
+    patterns:
+      # INFO 输出: redis_version:7.0.12
+      - '(?i)redis_version[: ]+(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+      # RESP 协议应答特征（版本需主动探测，被动 banner 拿不到 → 置信度 0.70 档）
+      - '^\+(OK|PONG)\b'
+      - '^-(ERR|NOAUTH|DENIED|WRONGTYPE)\b'
+
+  # ================= FTP =================
+  - id: ftp-proftpd
+    protocol: FTP
+    product: ProFTPD
+    port_hints: [21]
+    priority: 100
+    patterns:
+      # 例: 220 ProFTPD 1.3.7 Server ready
+      - '^220[^\r\n]*ProFTPD\s+(?P<version>[0-9][^\s]*)'
+
+  - id: ftp-vsftpd
+    protocol: FTP
+    product: vsFTPd
+    port_hints: [21]
+    priority: 100
+    patterns:
+      # 例: 220 (vsFTPd 3.0.3)
+      - '^220[^\r\n]*vsFTPd\s+(?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
+
+  - id: ftp-pureftpd
+    protocol: FTP
+    product: Pure-FTPd
+    port_hints: [21]
+    priority: 90
+    patterns:
+      # 例: 220-Welcome to Pure-FTPd [privsep] ...
+      - '^220[^\r\n]*Pure-FTPd'
+
+  - id: ftp-microsoft
+    protocol: FTP
+    product: Microsoft FTP Service
+    port_hints: [21]
+    priority: 90
+    patterns:
+      # 例: 220 Microsoft FTP Service
+      - '(?i)^220[^\r\n]*Microsoft FTP Service'
+
+  - id: ftp-generic
+    protocol: FTP
+    product: ""            # 仅 220 欢迎语，无法确定具体实现
+    port_hints: [21]
+    priority: 1
+    patterns:
+      - '^220'

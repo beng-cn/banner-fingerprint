@@ -1,0 +1,13 @@
+{
+  "records": [
+    {"ip": "1.2.3.4",  "port": 22,   "banner": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10"},
+    {"ip": "1.2.3.5",  "port": 80,   "banner": "HTTP/1.1 200 OK\r\nServer: nginx/1.24.0\r\nContent-Type: text/html\r\n\r\n"},
+    {"ip": "1.2.3.6",  "port": 443,  "banner": "HTTP/1.1 200 OK\r\nServer: Apache/2.4.57 (Ubuntu)\r\n\r\n"},
+    {"ip": "1.2.3.7",  "port": 3306, "banner": "8.0.32"},
+    {"ip": "1.2.3.8",  "port": 6379, "banner": "-DENIED Redis is running in protected mode because protected mode is enabled"},
+    {"ip": "1.2.3.9",  "port": 21,   "banner": "220 ProFTPD 1.3.7 Server ready"},
+    {"ip": "1.2.3.10", "port": 8080, "banner": "HTTP/1.1 200 OK\r\nServer: Jetty(9.4.51.v20230210)\r\n\r\n"},
+    {"ip": "9.9.9.9",  "port": 12345, "banner": "\u0001\u0002\u0003 无法识别的神秘服务"},
+    {"ip": "9.9.9.10", "port": 0,    "banner": ""}
+  ]
+}

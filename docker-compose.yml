@@ -1,0 +1,48 @@
+# Banner 指纹识别系统 —— Docker Compose 一键启动
+# 生产级部署要点：
+#   1. 容器间访问收敛：仅 server 发布 8080 端口；client 经 Compose 内部 DNS 以服务名访问，零端口发布
+#   2. 真实健康检测：healthcheck 调用 GET /health 真实业务端点；client 依赖 service_healthy 才启动
+#   3. 多阶段构建：golang 编译 → scratch 空镜像运行（见 Dockerfile）
+#   4. 权限收紧：非 root（65532）、只读根文件系统、cap_drop 全能力集、no-new-privileges
+#   5. 规则解耦：rules/ 只读挂载进容器，SIGHUP 热重载无需重建镜像
+services:
+  server:
+    build: .
+    image: bannerfp:latest
+    container_name: bannerfp-server
+    ports:
+      - "8080:8080"                        # 唯一对外发布端口
+    environment:
+      - PORT=8080
+      - RULES_PATH=/etc/bannerfp/rules/fingerprints.yaml
+    volumes:
+      - ./rules:/etc/bannerfp/rules:ro     # 规则库与代码解耦：只读挂载，热重载生效
+    read_only: true                        # 只读根文件系统
+    cap_drop: [ALL]                        # 移除全部 Linux 能力集
+    security_opt:
+      - no-new-privileges:true             # 禁止容器内提权
+    user: "65532:65532"                    # 非 root 运行
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 2s
+
+  client:
+    build: .
+    image: bannerfp:latest
+    container_name: bannerfp-client
+    command: ["/usr/local/bin/bannerfp-client", "-server", "http://server:8080", "-file", "/data/sample.json"]
+    depends_on:
+      server:
+        condition: service_healthy         # 真实健康检测：server 就绪后才运行
+    volumes:
+      - ./data:/data:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    user: "65532:65532"
+    restart: "no"                          # 一次性任务，识别完即退出

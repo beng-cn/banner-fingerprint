@@ -1,0 +1,14 @@
+# 二进制产物
+*.exe
+main
+*.test
+# Go 测试文件（仓库净化铁律：不提交测试文件）
+*_test.go
+test/
+# 编辑器与 IDE
+.idea/
+.vscode/
+# 本地数据产物
+data/*.out
+# 遗留备份文件
+new.go.bak
