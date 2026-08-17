@@ -34,7 +34,10 @@ services:
     build: .
     image: bannerfp:latest
     container_name: bannerfp-client
-    command: ["/usr/local/bin/bannerfp-client", "-server", "http://server:8080", "-file", "/data/sample.json"]
+    # 注意：镜像 ENTRYPOINT 固定为 server，Compose 的 command 只是追加给 ENTRYPOINT 的参数
+    # 无法覆盖入口，client 必须用 entrypoint 字段显式替换
+    entrypoint: ["/usr/local/bin/bannerfp-client"]
+    command: ["-server", "http://server:8080", "-file", "/data/sample.json"]
     depends_on:
       server:
         condition: service_healthy         # 真实健康检测：server 就绪后才运行
